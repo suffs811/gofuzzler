@@ -18,11 +18,12 @@ var (
 )
 
 func checkCewl() string {
-	path, err := exec.LookPath("ls")
+	path, err := exec.LookPath("cewl")
 	if err != nil {
 		fmt.Println("[-] cewl is not installed. Please run:")
 		fmt.Println("sudo apt install cewl")
-		panic(err)
+		fmt.Println("")
+		os.Exit(1)
 	}
 	return path
 }
