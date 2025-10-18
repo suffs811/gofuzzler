@@ -1,0 +1,6 @@
+github.com/bbalet/stopwords v1.0.0 h1:0TnGycCtY0zZi4ltKoOGRFIlZHv0WqpoIGUsObjztfo=
+github.com/bbalet/stopwords v1.0.0/go.mod h1:sAWrQoDMfqARGIn4s6dp7OW7ISrshUD8IP2q3KoqPjc=
+github.com/fluhus/gostuff v1.3.0 h1:Zunn9mTP/q891sMx/vO2HnOpjVARbE3DC9ZBjfPsH6I=
+github.com/fluhus/gostuff v1.3.0/go.mod h1:Ors3WQq2anpr3FTDqxD3M3CBsHt4vm3nO+GBkV79XYo=
+golang.org/x/text v0.30.0 h1:yznKA/E9zq54KzlzBEAWn1NXSQ8DIp/NYMy88xJjl4k=
+golang.org/x/text v0.30.0/go.mod h1:yDdHFIX9t+tORqspjENWgzaCVXgk0yYnYuSZ8UzzBVM=
