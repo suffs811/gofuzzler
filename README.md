@@ -7,7 +7,20 @@ This tool:
 2. finds the synonyms for each word to extend the wordlist
 3. fuzzes the wordlist by changing case, prepending/appending digits and special characters, and more
 
-##### Credits
+### Usage
+Download the tool:
+
+`git clone https://github.com/suffs811/gofuzzler.git`
+
+Build the tool:
+
+`go build gofuzzler.go`
+
+Run the tool:
+
+`./gofuzzler https://example.com`
+
+### Credits
 This tool makes use of:
 > CeWL commandline tool:
 
