@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
-	"os/exec"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,22 +14,12 @@ import (
 
 	"github.com/bbalet/stopwords"
 	"github.com/fluhus/gostuff/nlp/wordnet"
+	"golang.org/x/net/html"
 )
 
 var (
 	wg sync.WaitGroup
 )
-
-func checkCewl() string {
-	path, err := exec.LookPath("cewl")
-	if err != nil {
-		fmt.Println("[-] cewl is not installed. Please run:")
-		fmt.Println("sudo apt install cewl")
-		fmt.Println("")
-		os.Exit(1)
-	}
-	return path
-}
 
 // Goroutine task for obtaining synonmys
 func routineGetSyns(wn *wordnet.WordNet, tasks <-chan string, results chan<- string) {
@@ -96,9 +89,67 @@ func GetSyns(allWords []string) []string {
 	return synonyms
 }
 
-// Get words from the site using cewl command-line tool
-// TODO: implement custom cewl function in Go
-func GetWords(cewlPath string) []string {
+func cleanHTML(rawBody string) string {
+	// Parse HTML
+	doc, err := html.Parse(strings.NewReader(rawBody))
+	if err != nil {
+		return ""
+	}
+
+	var buf bytes.Buffer
+	var extractText func(*html.Node)
+	extractText = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			buf.WriteString(n.Data + " ")
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			extractText(c)
+		}
+	}
+	extractText(doc)
+
+	// Get raw text
+	text := buf.String()
+
+	// Remove digits-only words
+	digitsPattern := regexp.MustCompile(`^\d+$`)
+	words := strings.Fields(text)
+	var cleaned []string
+	for _, word := range words {
+		word = strings.ReplaceAll(word, ".", " ")
+		word = strings.TrimSpace(word)
+		if word != "" && !digitsPattern.MatchString(word) && len(word) > 3 {
+			cleaned = append(cleaned, word)
+		}
+	}
+
+	return strings.Join(cleaned, ",")
+}
+
+// Fetch and clean data into []string; remove html tags
+func FetchSite(site string) []byte {
+	resp, err := http.Get(site)
+	if err != nil {
+		fmt.Printf("Error fetching %v", site)
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	html := string(body)
+	cleanHtml := cleanHTML(html)
+	data := []byte(cleanHtml)
+	// Remove stopwords
+	data = stopwords.Clean(data, "en", false)
+
+	return data
+}
+
+// Get words from the site
+func GetWords() []string {
 	var site string
 	var allWords []string
 
@@ -110,23 +161,7 @@ func GetWords(cewlPath string) []string {
 	}
 
 	site = os.Args[1]
-
-	// Run CeWL on the target site with depth=0. Otherwise the output file will be ginormous
-	cmd := exec.Command(cewlPath, "-d", "0", "--lowercase", "-w", "cewl.txt", site)
-	err := cmd.Run()
-	if err != nil {
-		fmt.Println("Error running cewl:", err)
-		panic(err)
-	}
-
-	data, err := os.ReadFile("cewl.txt")
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		panic(err)
-	}
-
-	// Remove stopwords
-	data = stopwords.Clean(data, "en", false)
+	data := FetchSite(site)
 
 	fileContent := string(data)
 	fileWordsPre := strings.Split(fileContent, " ")
@@ -155,12 +190,17 @@ func GetUniqueWords(oldSlice []string) []string {
 func routineFuzzWords(tasks <-chan string, results chan<- string) {
 	defer wg.Done()
 	for word := range tasks {
-		results <- strings.ToLower(word)                                                                                                                                      // Lowercase
-		results <- strings.ToUpper(word)                                                                                                                                      // Uppercase
-		results <- strings.ToUpper(strings.Split(word, "")[0]) + strings.Join(strings.Split(word, "")[1:], "")                                                                // Capitalize first letter
-		results <- strings.Join(strings.Split(word, "")[0:len(word)-1], "") + strings.ToUpper(strings.Split(word, "")[len(word)-1])                                           // Capitalize last letter
-		results <- strings.Split(word, "")[0] + strings.ToUpper(strings.Join(strings.Split(word, "")[1:], ""))                                                                // Capitalize all but first letter
-		results <- strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(word, "a", "4"), "e", "3"), "l", "1"), "t", "7"), "o", "0") // 1337 speak
+		results <- strings.ToLower(word)                                                                                            // Lowercase
+		results <- strings.ToUpper(word)                                                                                            // Uppercase
+		results <- strings.ToUpper(strings.Split(word, "")[0]) + strings.Join(strings.Split(word, "")[1:], "")                      // Capitalize first letter
+		results <- strings.Join(strings.Split(word, "")[0:len(word)-1], "") + strings.ToUpper(strings.Split(word, "")[len(word)-1]) // Capitalize last letter
+		results <- strings.Split(word, "")[0] + strings.ToUpper(strings.Join(strings.Split(word, "")[1:], ""))                      // Capitalize all but first letter
+		results <- strings.ReplaceAll(
+			strings.ReplaceAll(
+				strings.ReplaceAll(
+					strings.ReplaceAll(
+						strings.ReplaceAll(
+							word, "a", "4"), "e", "3"), "l", "1"), "t", "7"), "o", "0") // 1337 speak
 
 		reverseWord := []string{}
 		for l := len(strings.Split(word, "")) - 1; l >= 0; l-- {
@@ -227,17 +267,10 @@ func WriteFile(words []string) {
 	if err != nil {
 		panic(err)
 	}
-	err = os.Remove("./cewl.txt")
-	if err != nil {
-		fmt.Println("Failed to delete cewl.txt")
-		panic(err)
-	}
 }
 
 func main() {
-	// Check for cewl command
-	cewlPath := checkCewl()
-	allWords := GetWords(cewlPath)
+	allWords := GetWords()
 	fmt.Printf("[+] Words from website: %d\n", len(allWords))
 	syns := GetSyns(allWords)
 	uniqueSyns := GetUniqueWords(syns)
