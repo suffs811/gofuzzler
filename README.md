@@ -22,9 +22,6 @@ Run the tool:
 
 ### Credits
 This tool makes use of:
-> CeWL commandline tool:
-
-https://github.com/digininja/CeWL
 
 > WordNet: 
 
